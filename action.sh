@@ -223,8 +223,8 @@ function start_vm {
 	# See: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job
 	echo "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/usr/bin/gce_runner_shutdown.sh" >.env
 	gcloud compute instances add-labels ${VM_ID} --zone=${machine_zone} --labels=gh_ready=0 && \\
-	RUNNER_ALLOW_RUNASROOT=1 ./config.sh --url https://github.com/${GITHUB_REPOSITORY} --token ${RUNNER_TOKEN} --labels ${VM_ID} --unattended ${ephemeral_flag} --disableupdate && \\
-	./svc.sh install && \\
+	sudo -E -u runner ./config.sh --url https://github.com/${GITHUB_REPOSITORY} --token ${RUNNER_TOKEN} --labels ${VM_ID} --unattended ${ephemeral_flag} --disableupdate && \\
+	./svc.sh install runner && \\
 	./svc.sh start && \\
 	gcloud compute instances add-labels ${VM_ID} --zone=${machine_zone} --labels=gh_ready=1
 	# 8 hours represents the max workflow runtime. This will shutdown the instance if everything else fails.
@@ -247,23 +247,30 @@ function start_vm {
       fi
     fi
     echo "✅ Startup script will install GitHub Actions v$runner_ver"
+    
+    # Create a user to run the runner
+    startup_script="#!/bin/bash
+    useradd -m -d /actions-runner runner
+    usermod -aG sudo runner
+    echo 'runner ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+    mkdir /actions-runner
+    cd /actions-runner
+
     if $arm ; then
-      startup_script="#!/bin/bash
-      mkdir /actions-runner
-      cd /actions-runner
       curl -o actions-runner-linux-arm64-${runner_ver}.tar.gz -L https://github.com/actions/runner/releases/download/v${runner_ver}/actions-runner-linux-arm64-${runner_ver}.tar.gz
       tar xzf ./actions-runner-linux-arm64-${runner_ver}.tar.gz
-      ./bin/installdependencies.sh && \\
-      $startup_script"
     else
-      startup_script="#!/bin/bash
-      mkdir /actions-runner
-      cd /actions-runner
       curl -o actions-runner-linux-x64-${runner_ver}.tar.gz -L https://github.com/actions/runner/releases/download/v${runner_ver}/actions-runner-linux-x64-${runner_ver}.tar.gz
       tar xzf ./actions-runner-linux-x64-${runner_ver}.tar.gz
-      ./bin/installdependencies.sh && \\
-      $startup_script"
     fi
+
+    chown -R runner:runner /actions-runner
+    chmod -R 755 /actions-runner
+    ls -l /actions-runner
+
+    ./bin/installdependencies.sh && \\
+    $startup_script"
   fi
   
   # GCE VM label values requirements:
