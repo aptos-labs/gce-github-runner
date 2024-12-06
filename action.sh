@@ -210,14 +210,14 @@ function start_vm {
 	EOF
 
 	chmod +x /etc/systemd/system/shutdown.sh
-	systemctl daemon-reload
-	systemctl enable shutdown.service
+	sudo systemctl daemon-reload
+	sudo systemctl enable shutdown.service
 
 	cat <<-EOF > /usr/bin/gce_runner_shutdown.sh
 	#!/bin/sh
 	echo \"✅ Self deleting $VM_ID in ${machine_zone} in ${shutdown_timeout} seconds ...\"
 	# We tear down the machine by starting the systemd service that was registered by the startup script
-	systemctl start shutdown.service
+	sudo systemctl start shutdown.service
 	EOF
 
 	# See: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job
